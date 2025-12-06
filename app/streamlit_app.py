@@ -171,31 +171,42 @@ def main():
             "🔬 Sci/Tech": "New quantum computer breakthrough achieves unprecedented processing speeds and accuracy"
         }
         
+        def set_example(text):
+            st.session_state.text_input = text
+            st.session_state.text_area_key = str(time.time())
+        
         for cat, example in examples.items():
-            if st.button(f"{cat}", key=cat, use_container_width=True):
-                st.session_state.example_text = example
+            st.button(f"{cat}", key=cat, use_container_width=True, on_click=set_example, args=(example,))
     
     # Main content area
     col1, col2, col3 = st.columns([1, 6, 1])
     
     with col2:
-        # Text input
-        default_text = st.session_state.get('example_text', '')
+        # Initialize session state for text input
+        if 'text_input' not in st.session_state:
+            st.session_state.text_input = ''
+        
+        def clear_text():
+            st.session_state.text_input = ''
+            st.session_state.text_area_key = str(time.time())
+        
+        # Initialize text area key
+        if 'text_area_key' not in st.session_state:
+            st.session_state.text_area_key = '0'
         
         text_input = st.text_area(
             "📝 Enter a news article headline or text:",
-            value=default_text,
+            value=st.session_state.text_input,
             height=150,
             placeholder="Type or paste a news article here...",
-            help="Enter the text you want to classify"
+            help="Enter the text you want to classify",
+            key=f"text_area_{st.session_state.text_area_key}"
         )
         
         # Clear button
         col_btn1, col_btn2, col_btn3 = st.columns([2, 1, 2])
         with col_btn2:
-            if st.button("🗑️ Clear", use_container_width=True):
-                st.session_state.example_text = ''
-                st.rerun()
+            st.button("🗑️ Clear", use_container_width=True, on_click=clear_text)
         
         # Classify button
         if st.button("🚀 Classify Article", type="primary", use_container_width=True):

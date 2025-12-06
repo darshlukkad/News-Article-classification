@@ -8,7 +8,7 @@ import joblib
 import numpy as np
 from transformers import DistilBertTokenizer, DistilBertForSequenceClassification
 from typing import Tuple, List, Dict
-from data_prep import clean_text
+from src.data_prep import clean_text
 
 
 class BaselinePredictor:
