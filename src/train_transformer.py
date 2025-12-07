@@ -120,8 +120,13 @@ class TransformerModel:
         self.val_losses = []
         self.val_accuracies = []
         
-    def load_data(self, cache_dir: str = "./data"):
-        """Load AG News dataset"""
+    def load_data(self, cache_dir: str = "./data", sample_fraction: float = 1.0):
+        """Load AG News dataset
+        
+        Args:
+            cache_dir: Directory to cache dataset
+            sample_fraction: Fraction of training data to use (0.0 to 1.0)
+        """
         print("Loading AG News dataset...")
         dataset = load_dataset("ag_news", cache_dir=cache_dir)
         
@@ -129,6 +134,21 @@ class TransformerModel:
         self.train_labels = dataset['train']['label']
         self.test_texts = dataset['test']['text']
         self.test_labels = dataset['test']['label']
+        
+        # Sample training data if fraction < 1.0
+        if sample_fraction < 1.0:
+            sample_size = int(len(self.train_texts) * sample_fraction)
+            np.random.seed(self.random_state)
+            indices = np.random.choice(len(self.train_texts), sample_size, replace=False)
+            self.train_texts = [self.train_texts[i] for i in indices]
+            self.train_labels = [self.train_labels[i] for i in indices]
+            print(f"✓ Sampled {sample_fraction*100:.0f}% of training data")
+            
+            # Also sample test set for faster evaluation
+            test_sample_size = int(len(self.test_texts) * sample_fraction * 10)  # 10x training fraction
+            test_indices = np.random.choice(len(self.test_texts), min(test_sample_size, len(self.test_texts)), replace=False)
+            self.test_texts = [self.test_texts[i] for i in test_indices]
+            self.test_labels = [self.test_labels[i] for i in test_indices]
         
         # Create validation split (10% of training data)
         split_idx = int(0.9 * len(self.train_texts))
@@ -383,7 +403,7 @@ class TransformerModel:
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
         print(f"✓ Saved training curves to {save_path}")
         
-        plt.show()
+        plt.close()  # Close instead of show to avoid blocking
         
         return save_path
     
@@ -405,6 +425,8 @@ class TransformerModel:
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
         print(f"✓ Saved confusion matrix to {save_path}")
         
+        plt.close()  # Close instead of show to avoid blocking
+        
         plt.show()
         
         return save_path
@@ -421,17 +443,28 @@ class TransformerModel:
         return model_dir
 
 
-def train_with_mlflow():
-    """Train transformer model with MLflow tracking"""
+def train_with_mlflow(quick_mode: bool = False):
+    """Train transformer model with MLflow tracking
+    
+    Args:
+        quick_mode: If True, use 10% data and 1 epoch for fast training
+    """
     
     # Set MLflow experiment
     mlflow.set_experiment("AG_News_Classification")
     
+    # Quick mode settings
+    num_epochs = 1 if quick_mode else 3
+    sample_fraction = 0.005 if quick_mode else 1.0  # 0.5% for quick mode (~675 samples)
+    run_name = "transformer_distilbert_quick" if quick_mode else "transformer_distilbert"
+    
     # Start MLflow run
-    with mlflow.start_run(run_name="transformer_distilbert"):
+    with mlflow.start_run(run_name=run_name):
         
         print("\n" + "="*60)
         print("TRAINING TRANSFORMER MODEL WITH MLFLOW TRACKING")
+        if quick_mode:
+            print("⚡ QUICK MODE: ~675 samples, 1 epoch")
         print("="*60)
         
         # Initialize model
@@ -441,7 +474,7 @@ def train_with_mlflow():
             max_length=128,
             batch_size=16,
             learning_rate=2e-5,
-            num_epochs=3,
+            num_epochs=num_epochs,
             random_state=42
         )
         
@@ -454,9 +487,11 @@ def train_with_mlflow():
         mlflow.log_param("num_epochs", model.num_epochs)
         mlflow.log_param("optimizer", "AdamW")
         mlflow.log_param("scheduler", "linear_warmup")
+        mlflow.log_param("quick_mode", quick_mode)
+        mlflow.log_param("sample_fraction", sample_fraction)
         
         # Load data and create dataloaders
-        model.load_data()
+        model.load_data(sample_fraction=sample_fraction)
         model.create_dataloaders()
         
         # Setup training
@@ -501,4 +536,6 @@ def train_with_mlflow():
 
 
 if __name__ == "__main__":
-    model, metrics = train_with_mlflow()
+    # Use quick_mode=True for fast training (~2 min)
+    # Use quick_mode=False for full training (~30 min)
+    model, metrics = train_with_mlflow(quick_mode=False)
